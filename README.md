@@ -20,7 +20,7 @@ The settings window opens automatically the first time the mod runs.
 
 - **Enable** restores the target-lock feature. Disabling the mod clears the current lock and restores Farever's original feature flag.
 - **Auto-unlock when target dies** clears the lock as soon as the locked enemy is defeated or despawns. It is enabled by default.
-- **Press Lock Target to switch targets** changes the lock directly to the newly aimed-at enemy when one is available. Pressing it without another valid target still unlocks normally. It is disabled by default.
+- **Press Lock Target to switch targets** changes the lock directly to Farever's current `autoTarget` when another enemy is aimed at. Pressing it without another valid target still unlocks normally. It is disabled by default.
 - Use Farever's normal **Lock Target** key or controller binding to toggle a target lock.
 - Farever's native animated hard-lock indicator appears above the locked enemy.
 - Press `F9` to reopen the settings window. The settings hotkey can be changed from the window.
@@ -37,7 +37,6 @@ Farever contains a nearly complete target-lock implementation, but `PlayerContro
 
 Farever already stores the target on `Hero.lockedTarget`, feeds target-based skills through `SkillTarget.Target`, leaves `SkillTarget.Point` behavior intact, and marks the corresponding enemy widget with the native `hard-lock` style.
 
-The mod also intercepts Farever's last-second `getAutoTarget()` refresh while a target-based skill is being resolved. It substitutes the stored hard lock at that point, preventing an enemy newly under the crosshair from stealing a single-target attack. The original candidate is retained for optional quick-swapping.
 
 ## Building (for developers)
 
