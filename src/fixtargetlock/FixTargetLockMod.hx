@@ -54,7 +54,6 @@ class FixTargetLockMod {
         loadConfig();
         panelOpen.set(!hasSeenMenu);
         ImGui.register(HlxRuntime.moduleName(), drawSettings);
-        trace("[FixTargetLock] loaded; waiting for PlayerController");
     }
 
     @:hlx.postfix(client.PlayerController.updateInputs)
@@ -90,19 +89,16 @@ class FixTargetLockMod {
                         HlxRuntime.callResolved(lockTargetMember, [instance, aimedTarget]);
                         updateStatus(instance);
                         swapped = true;
-                        trace("[FixTargetLock] switched locked target");
                     }
                 }
 
                 if (!swapped) {
                     HlxRuntime.callResolved(leaveLockMember, [instance]);
                     lastStatus = "Unlocked";
-                    trace("[FixTargetLock] target unlocked");
                 }
             } else {
                 HlxRuntime.callResolved(lockAutoTargetMember, [instance]);
                 updateStatus(instance);
-                trace("[FixTargetLock] lock action pressed: " + lastStatus);
             }
 
             autoUnlockDeadTarget(instance);
@@ -246,7 +242,6 @@ class FixTargetLockMod {
         if (shouldUnlock) {
             HlxRuntime.callResolved(leaveLockMember, [controller]);
             lastStatus = "Unlocked (target defeated)";
-            trace("[FixTargetLock] automatically unlocked defeated target");
             return true;
         }
         return false;
