@@ -6,7 +6,7 @@ Look at an enemy and press Farever's existing Lock Target binding to lock it. Pr
 
 The mod uses Farever's existing `lockedTarget`, `SkillTarget`, and `hard-lock` HUD systems rather than implementing a separate combat targeting system.
 
-For target-based attacks, the mod replaces Farever's last-second `autoTarget` choice with a native `SkillTarget.Target` containing the locked enemy. This prevents another enemy under the crosshair from stealing the attack. Point-targeted and area-of-effect skills continue through Farever's original targeting path.
+For every attack that Farever immediately submits as `Target(autoTarget)`, including normal staff attacks, the mod replaces the last-second `autoTarget` choice with a native `SkillTarget.Target` containing the locked enemy. This prevents another enemy under the crosshair from stealing the attack. Skills that enter Farever's manual point/ground-targeting mode continue through the original targeting path.
 
 ## Installation
 
