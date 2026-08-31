@@ -15,6 +15,7 @@ class FixTargetLockMod {
     static var enabled = new BoolRef(true);
     static var autoUnlockOnDeath = new BoolRef(true);
     static var quickSwapTarget = new BoolRef(false);
+    static var disableCameraMovement = new BoolRef(false);
     static var panelOpen = new BoolRef(true);
     static var hasSeenMenu:Bool = false;
 
@@ -45,7 +46,7 @@ class FixTargetLockMod {
     static var allowAimingMember:hlx.runtime.ResolvedMember;
     static var lastController:Dynamic;
     static var originalTargetLock:Null<Bool>;
-    static var lastAppliedEnabled:Null<Bool>;
+    static var lastAppliedTargetLock:Null<Bool>;
     static var lastStatus:String = "Waiting for Farever";
 
     static function main():Void {
@@ -277,11 +278,14 @@ class FixTargetLockMod {
             originalTargetLock = cast current;
         }
 
-        if (lastAppliedEnabled == enabled.get())
+        var desired = enabled.get()
+            ? !disableCameraMovement.get()
+            : originalTargetLock;
+        if (lastAppliedTargetLock == desired)
             return;
 
-        Reflect.setField(camera, "TargetLock", enabled.get() ? true : originalTargetLock);
-        lastAppliedEnabled = enabled.get();
+        Reflect.setField(camera, "TargetLock", desired);
+        lastAppliedTargetLock = desired;
     }
 
     static function updateStatus(controller:Dynamic):Void {
@@ -296,7 +300,7 @@ class FixTargetLockMod {
         if (lastController != null && resolveMembers()) {
             try HlxRuntime.callResolved(leaveLockMember, [lastController]) catch (_:Dynamic) {}
         }
-        lastAppliedEnabled = null;
+        lastAppliedTargetLock = null;
         applyFeatureFlag();
     }
 
@@ -327,7 +331,7 @@ class FixTargetLockMod {
             if (!enabled.get())
                 disableAndUnlock();
             else {
-                lastAppliedEnabled = null;
+                lastAppliedTargetLock = null;
                 applyFeatureFlag();
             }
             saveConfig();
@@ -342,6 +346,14 @@ class FixTargetLockMod {
         ImGui.checkbox("Press Lock Target to switch targets", quickSwapTarget);
         if (quickSwapTarget.get() != oldQuickSwap)
             saveConfig();
+
+        var oldDisableCamera = disableCameraMovement.get();
+        ImGui.checkbox("Disable automatic camera movement", disableCameraMovement);
+        if (disableCameraMovement.get() != oldDisableCamera) {
+            lastAppliedTargetLock = null;
+            applyFeatureFlag();
+            saveConfig();
+        }
 
         ImGui.text("Status: " + lastStatus);
         ImGui.textWrapped("Use Farever's existing Lock Target binding. Press once while aiming at an enemy to lock; press it again to unlock.");
@@ -443,6 +455,7 @@ class FixTargetLockMod {
             if (Reflect.hasField(data, "enabled")) enabled.set(Reflect.field(data, "enabled"));
             if (Reflect.hasField(data, "autoUnlockOnDeath")) autoUnlockOnDeath.set(Reflect.field(data, "autoUnlockOnDeath"));
             if (Reflect.hasField(data, "quickSwapTarget")) quickSwapTarget.set(Reflect.field(data, "quickSwapTarget"));
+            if (Reflect.hasField(data, "disableCameraMovement")) disableCameraMovement.set(Reflect.field(data, "disableCameraMovement"));
             if (Reflect.hasField(data, "hotkeyKey")) hotkeyKey = cast Reflect.field(data, "hotkeyKey");
             if (Reflect.hasField(data, "hotkeyCtrl")) hotkeyCtrl = Reflect.field(data, "hotkeyCtrl");
             if (Reflect.hasField(data, "hotkeyShift")) hotkeyShift = Reflect.field(data, "hotkeyShift");
@@ -459,6 +472,7 @@ class FixTargetLockMod {
                 enabled: enabled.get(),
                 autoUnlockOnDeath: autoUnlockOnDeath.get(),
                 quickSwapTarget: quickSwapTarget.get(),
+                disableCameraMovement: disableCameraMovement.get(),
                 hotkeyKey: hotkeyKey,
                 hotkeyCtrl: hotkeyCtrl,
                 hotkeyShift: hotkeyShift,
