@@ -47,6 +47,7 @@ class FixTargetLockMod {
     static var lastController:Dynamic;
     static var originalTargetLock:Null<Bool>;
     static var lastAppliedTargetLock:Null<Bool>;
+    static var cameraUpdateTargetLock:Null<Bool>;
     static var lastStatus:String = "Waiting for Farever";
 
     static function main():Void {
@@ -278,14 +279,54 @@ class FixTargetLockMod {
             originalTargetLock = cast current;
         }
 
-        var desired = enabled.get()
-            ? !disableCameraMovement.get()
-            : originalTargetLock;
+        // Keep Farever's lock mode enabled outside the camera update. Other
+        // systems use this flag for locked sensitivity and targeting behavior.
+        var desired = enabled.get() ? true : originalTargetLock;
         if (lastAppliedTargetLock == desired)
             return;
 
         Reflect.setField(camera, "TargetLock", desired);
         lastAppliedTargetLock = desired;
+    }
+
+    @:hlx.prefix(client.GameCamera.postUpdate)
+    static function beforeCameraPostUpdate(instance:Dynamic, dt:Float):HlxPrefixControl {
+        cameraUpdateTargetLock = null;
+        if (!enabled.get() || !disableCameraMovement.get())
+            return Continue;
+
+        try {
+            if (constType == null)
+                constType = HlxRuntime.resolveType("Const");
+            if (constType == null)
+                return Continue;
+            var camera:Dynamic = HlxRuntime.resolveStaticField(constType, "Camera");
+            if (camera == null)
+                return Continue;
+
+            var current:Dynamic = Reflect.field(camera, "TargetLock");
+            if (current == null)
+                return Continue;
+            cameraUpdateTargetLock = cast current;
+            Reflect.setField(camera, "TargetLock", false);
+        } catch (_:Dynamic) {
+            cameraUpdateTargetLock = null;
+        }
+        return Continue;
+    }
+
+    @:hlx.postfix(client.GameCamera.postUpdate)
+    static function afterCameraPostUpdate(instance:Dynamic, dt:Float, result:Void):Void {
+        if (cameraUpdateTargetLock == null)
+            return;
+        try {
+            if (constType != null) {
+                var camera:Dynamic = HlxRuntime.resolveStaticField(constType, "Camera");
+                if (camera != null)
+                    Reflect.setField(camera, "TargetLock", cameraUpdateTargetLock);
+            }
+        } catch (_:Dynamic) {}
+        cameraUpdateTargetLock = null;
     }
 
     static function updateStatus(controller:Dynamic):Void {
@@ -350,8 +391,6 @@ class FixTargetLockMod {
         var oldDisableCamera = disableCameraMovement.get();
         ImGui.checkbox("Disable automatic camera movement", disableCameraMovement);
         if (disableCameraMovement.get() != oldDisableCamera) {
-            lastAppliedTargetLock = null;
-            applyFeatureFlag();
             saveConfig();
         }
 
