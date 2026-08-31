@@ -4,7 +4,6 @@ import haxe.Json;
 import imgui.ImGui;
 import imgui.Enums.ImGuiKey;
 import imgui.ref.BoolRef;
-import hlx.runtime.HlxPrefixControl;
 import sys.FileSystem;
 import sys.io.File;
 
@@ -30,7 +29,6 @@ class FixTargetLockMod {
     static var unitControllerType:hl.Bytes;
     static var gameCameraType:hl.Bytes;
     static var gameObjectType:hl.Bytes;
-    static var baseSkillType:hl.Bytes;
     static var constType:hl.Bytes;
     static var isPressedMember:hlx.runtime.ResolvedMember;
     static var lockAutoTargetMember:hlx.runtime.ResolvedMember;
@@ -39,13 +37,10 @@ class FixTargetLockMod {
     static var getLockedTargetMember:hlx.runtime.ResolvedMember;
     static var isDeadMember:hlx.runtime.ResolvedMember;
     static var lockTargetMember:hlx.runtime.ResolvedMember;
-    static var isTargetBasedMember:hlx.runtime.ResolvedMember;
     static var lastController:Dynamic;
     static var originalTargetLock:Null<Bool>;
     static var lastAppliedEnabled:Null<Bool>;
     static var lastStatus:String = "Waiting for Farever";
-    static var lastLookTarget:Dynamic;
-    static var enforceLockedTarget:Bool = false;
 
     static function main():Void {
         loadConfig();
@@ -80,10 +75,11 @@ class FixTargetLockMod {
             var inLock:Dynamic = HlxRuntime.resolveField(instance, "inLock");
             if (inLock == true) {
                 var swapped = false;
-                if (quickSwapTarget.get() && lastLookTarget != null) {
+                var aimedTarget:Dynamic = HlxRuntime.resolveField(instance, "autoTarget");
+                if (quickSwapTarget.get() && aimedTarget != null) {
                     var lockedTarget = getLockedTarget(instance);
-                    if (lockedTarget != lastLookTarget) {
-                        HlxRuntime.callResolved(lockTargetMember, [instance, lastLookTarget]);
+                    if (lockedTarget != aimedTarget) {
+                        HlxRuntime.callResolved(lockTargetMember, [instance, aimedTarget]);
                         updateStatus(instance);
                         swapped = true;
                         trace("[FixTargetLock] switched locked target");
@@ -129,49 +125,6 @@ class FixTargetLockMod {
             && lockAutoTargetMember != null
             && leaveLockMember != null
             && lockTargetMember != null;
-    }
-
-    // Farever's startSkillAim recalculates autoTarget immediately before an
-    // attack. Mark only target-based skills so point/AoE targeting is untouched.
-    @:hlx.prefix(client.UnitController.startSkillAim)
-    static function beforeStartSkillAim(instance:Dynamic, skill:Dynamic, callback:Dynamic, input:String):HlxPrefixControl {
-        enforceLockedTarget = false;
-        try {
-            if (enabled.get() && instance == lastController) {
-                if (baseSkillType == null)
-                    baseSkillType = HlxRuntime.resolveType("st.skill.BaseSkill");
-                if (baseSkillType != null && isTargetBasedMember == null)
-                    isTargetBasedMember = HlxRuntime.resolveMember(baseSkillType, "isTargetBased");
-                if (isTargetBasedMember != null) {
-                    var targetBased:Dynamic = HlxRuntime.callResolved(isTargetBasedMember, [skill]);
-                    enforceLockedTarget = targetBased == true;
-                }
-            }
-        } catch (_:Dynamic) {}
-        return Continue;
-    }
-
-    @:hlx.postfix(client.UnitController.startSkillAim)
-    static function afterStartSkillAim(instance:Dynamic, skill:Dynamic, callback:Dynamic, input:String, result:Void):Void {
-        enforceLockedTarget = false;
-    }
-
-    // Preserve Farever's freshly calculated candidate for quick-swap, but
-    // substitute the hard lock while a target-based attack is being resolved.
-    @:hlx.rawReturn
-    @:hlx.postfix(client.UnitController.getAutoTarget)
-    static function afterGetAutoTarget(instance:Dynamic, ranged:hl.Ref<Bool>, result:Dynamic):Dynamic {
-        try {
-            if (enabled.get() && instance == lastController) {
-                lastLookTarget = result;
-                if (enforceLockedTarget) {
-                    var lockedTarget = getLockedTarget(instance);
-                    if (lockedTarget != null)
-                        return lockedTarget;
-                }
-            }
-        } catch (_:Dynamic) {}
-        return result;
     }
 
     static function resolveDeathCheckMembers():Bool {
