@@ -6,6 +6,8 @@ Look at an enemy and press Farever's existing Lock Target binding to lock it. Pr
 
 The mod uses Farever's existing `lockedTarget`, `SkillTarget`, and `hard-lock` HUD systems rather than implementing a separate combat targeting system.
 
+For target-based attacks, the mod replaces Farever's last-second `autoTarget` choice with a native `SkillTarget.Target` containing the locked enemy. This prevents another enemy under the crosshair from stealing the attack. Point-targeted and area-of-effect skills continue through Farever's original targeting path.
+
 ## Installation
 
 1. Install [HLX Core](https://www.nexusmods.com/site/mods/2118?tab=files) in the Farever game directory.
