@@ -4,6 +4,7 @@ import haxe.Json;
 import imgui.ImGui;
 import imgui.Enums.ImGuiKey;
 import imgui.ref.BoolRef;
+import hlx.runtime.HlxPrefixControl;
 import sys.FileSystem;
 import sys.io.File;
 
@@ -13,6 +14,7 @@ class FixTargetLockMod {
 
     static var enabled = new BoolRef(true);
     static var autoUnlockOnDeath = new BoolRef(true);
+    static var quickSwapTarget = new BoolRef(false);
     static var panelOpen = new BoolRef(true);
     static var hasSeenMenu:Bool = false;
 
@@ -28,6 +30,7 @@ class FixTargetLockMod {
     static var unitControllerType:hl.Bytes;
     static var gameCameraType:hl.Bytes;
     static var gameObjectType:hl.Bytes;
+    static var baseSkillType:hl.Bytes;
     static var constType:hl.Bytes;
     static var isPressedMember:hlx.runtime.ResolvedMember;
     static var lockAutoTargetMember:hlx.runtime.ResolvedMember;
@@ -35,10 +38,14 @@ class FixTargetLockMod {
     static var getGameCameraMember:hlx.runtime.ResolvedMember;
     static var getLockedTargetMember:hlx.runtime.ResolvedMember;
     static var isDeadMember:hlx.runtime.ResolvedMember;
+    static var lockTargetMember:hlx.runtime.ResolvedMember;
+    static var isTargetBasedMember:hlx.runtime.ResolvedMember;
     static var lastController:Dynamic;
     static var originalTargetLock:Null<Bool>;
     static var lastAppliedEnabled:Null<Bool>;
     static var lastStatus:String = "Waiting for Farever";
+    static var lastLookTarget:Dynamic;
+    static var enforceLockedTarget:Bool = false;
 
     static function main():Void {
         loadConfig();
@@ -72,9 +79,22 @@ class FixTargetLockMod {
 
             var inLock:Dynamic = HlxRuntime.resolveField(instance, "inLock");
             if (inLock == true) {
-                HlxRuntime.callResolved(leaveLockMember, [instance]);
-                lastStatus = "Unlocked";
-                trace("[FixTargetLock] target unlocked");
+                var swapped = false;
+                if (quickSwapTarget.get() && lastLookTarget != null) {
+                    var lockedTarget = getLockedTarget(instance);
+                    if (lockedTarget != lastLookTarget) {
+                        HlxRuntime.callResolved(lockTargetMember, [instance, lastLookTarget]);
+                        updateStatus(instance);
+                        swapped = true;
+                        trace("[FixTargetLock] switched locked target");
+                    }
+                }
+
+                if (!swapped) {
+                    HlxRuntime.callResolved(leaveLockMember, [instance]);
+                    lastStatus = "Unlocked";
+                    trace("[FixTargetLock] target unlocked");
+                }
             } else {
                 HlxRuntime.callResolved(lockAutoTargetMember, [instance]);
                 updateStatus(instance);
@@ -102,10 +122,56 @@ class FixTargetLockMod {
             lockAutoTargetMember = HlxRuntime.resolveMember(playerControllerType, "lockAutoTarget");
         if (leaveLockMember == null)
             leaveLockMember = HlxRuntime.resolveMember(playerControllerType, "leaveLock");
+        if (lockTargetMember == null)
+            lockTargetMember = HlxRuntime.resolveMember(playerControllerType, "lockTarget");
 
         return isPressedMember != null
             && lockAutoTargetMember != null
-            && leaveLockMember != null;
+            && leaveLockMember != null
+            && lockTargetMember != null;
+    }
+
+    // Farever's startSkillAim recalculates autoTarget immediately before an
+    // attack. Mark only target-based skills so point/AoE targeting is untouched.
+    @:hlx.prefix(client.UnitController.startSkillAim)
+    static function beforeStartSkillAim(instance:Dynamic, skill:Dynamic, callback:Dynamic, input:String):HlxPrefixControl {
+        enforceLockedTarget = false;
+        try {
+            if (enabled.get() && instance == lastController) {
+                if (baseSkillType == null)
+                    baseSkillType = HlxRuntime.resolveType("st.skill.BaseSkill");
+                if (baseSkillType != null && isTargetBasedMember == null)
+                    isTargetBasedMember = HlxRuntime.resolveMember(baseSkillType, "isTargetBased");
+                if (isTargetBasedMember != null) {
+                    var targetBased:Dynamic = HlxRuntime.callResolved(isTargetBasedMember, [skill]);
+                    enforceLockedTarget = targetBased == true;
+                }
+            }
+        } catch (_:Dynamic) {}
+        return Continue;
+    }
+
+    @:hlx.postfix(client.UnitController.startSkillAim)
+    static function afterStartSkillAim(instance:Dynamic, skill:Dynamic, callback:Dynamic, input:String, result:Void):Void {
+        enforceLockedTarget = false;
+    }
+
+    // Preserve Farever's freshly calculated candidate for quick-swap, but
+    // substitute the hard lock while a target-based attack is being resolved.
+    @:hlx.rawReturn
+    @:hlx.postfix(client.UnitController.getAutoTarget)
+    static function afterGetAutoTarget(instance:Dynamic, ranged:hl.Ref<Bool>, result:Dynamic):Dynamic {
+        try {
+            if (enabled.get() && instance == lastController) {
+                lastLookTarget = result;
+                if (enforceLockedTarget) {
+                    var lockedTarget = getLockedTarget(instance);
+                    if (lockedTarget != null)
+                        return lockedTarget;
+                }
+            }
+        } catch (_:Dynamic) {}
+        return result;
     }
 
     static function resolveDeathCheckMembers():Bool {
@@ -138,10 +204,7 @@ class FixTargetLockMod {
         if (inLock != true || !resolveDeathCheckMembers())
             return false;
 
-        var camera:Dynamic = HlxRuntime.callResolved(getGameCameraMember, [controller]);
-        var target:Dynamic = camera == null
-            ? null
-            : HlxRuntime.callResolved(getLockedTargetMember, [camera]);
+        var target:Dynamic = getLockedTarget(controller);
 
         // A missing weak target is no longer a usable lock and is treated like a
         // despawned/dead target. Otherwise, ask the game for its native death state.
@@ -158,6 +221,15 @@ class FixTargetLockMod {
             return true;
         }
         return false;
+    }
+
+    static function getLockedTarget(controller:Dynamic):Dynamic {
+        if (!resolveDeathCheckMembers())
+            return null;
+        var camera:Dynamic = HlxRuntime.callResolved(getGameCameraMember, [controller]);
+        return camera == null
+            ? null
+            : HlxRuntime.callResolved(getLockedTargetMember, [camera]);
     }
 
     static function applyFeatureFlag():Void {
@@ -236,6 +308,11 @@ class FixTargetLockMod {
         var oldAutoUnlock = autoUnlockOnDeath.get();
         ImGui.checkbox("Auto-unlock when target dies", autoUnlockOnDeath);
         if (autoUnlockOnDeath.get() != oldAutoUnlock)
+            saveConfig();
+
+        var oldQuickSwap = quickSwapTarget.get();
+        ImGui.checkbox("Press Lock Target to switch targets", quickSwapTarget);
+        if (quickSwapTarget.get() != oldQuickSwap)
             saveConfig();
 
         ImGui.text("Status: " + lastStatus);
@@ -336,6 +413,7 @@ class FixTargetLockMod {
             var data:Dynamic = Json.parse(File.getContent(CONFIG_PATH));
             if (Reflect.hasField(data, "enabled")) enabled.set(Reflect.field(data, "enabled"));
             if (Reflect.hasField(data, "autoUnlockOnDeath")) autoUnlockOnDeath.set(Reflect.field(data, "autoUnlockOnDeath"));
+            if (Reflect.hasField(data, "quickSwapTarget")) quickSwapTarget.set(Reflect.field(data, "quickSwapTarget"));
             if (Reflect.hasField(data, "hotkeyKey")) hotkeyKey = cast Reflect.field(data, "hotkeyKey");
             if (Reflect.hasField(data, "hotkeyCtrl")) hotkeyCtrl = Reflect.field(data, "hotkeyCtrl");
             if (Reflect.hasField(data, "hotkeyShift")) hotkeyShift = Reflect.field(data, "hotkeyShift");
@@ -351,6 +429,7 @@ class FixTargetLockMod {
             File.saveContent(CONFIG_PATH, Json.stringify({
                 enabled: enabled.get(),
                 autoUnlockOnDeath: autoUnlockOnDeath.get(),
+                quickSwapTarget: quickSwapTarget.get(),
                 hotkeyKey: hotkeyKey,
                 hotkeyCtrl: hotkeyCtrl,
                 hotkeyShift: hotkeyShift,
