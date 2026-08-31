@@ -195,7 +195,6 @@ class FixTargetLockMod {
                 return Continue;
 
             Reflect.callMethod(null, callback, [forcedTarget]);
-            trace("[FixTargetLock] forced attack to locked target");
             return Skip;
         } catch (e:Dynamic) {
             // Preserve normal combat if a game update changes any target types.
@@ -353,7 +352,7 @@ class FixTargetLockMod {
             return;
 
         ImGui.setNextWindowBgAlpha(0.98);
-        if (!ImGui.begin("Fix Target Lock", panelOpen)) {
+        if (!ImGui.begin("Target Lock Settings", panelOpen)) {
             ImGui.end();
             return;
         }
@@ -362,9 +361,6 @@ class FixTargetLockMod {
             hasSeenMenu = true;
             saveConfig();
         }
-
-        ImGui.text("Restores Farever's target-lock input");
-        ImGui.separator();
 
         var oldEnabled = enabled.get();
         ImGui.checkbox("Enable", enabled);
@@ -393,11 +389,6 @@ class FixTargetLockMod {
         if (disableCameraMovement.get() != oldDisableCamera) {
             saveConfig();
         }
-
-        ImGui.text("Status: " + lastStatus);
-        ImGui.textWrapped("Use Farever's existing Lock Target binding. Press once while aiming at an enemy to lock; press it again to unlock.");
-        ImGui.textWrapped("Single-target attacks use the lock. Area-of-effect attacks keep their normal targeting.");
-        ImGui.textWrapped("Strict targeting is active: normal and immediate-target attacks are submitted with the locked enemy even while looking at another enemy.");
 
         ImGui.separator();
         ImGui.text("Open settings hotkey: " + hotkeyLabel());
