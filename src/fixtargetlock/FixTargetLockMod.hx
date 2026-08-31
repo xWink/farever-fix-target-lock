@@ -31,6 +31,7 @@ class FixTargetLockMod {
     static var gameCameraType:hl.Bytes;
     static var gameObjectType:hl.Bytes;
     static var baseSkillType:hl.Bytes;
+    static var skillScriptType:hl.Bytes;
     static var skillTargetType:hl.Bytes;
     static var constType:hl.Bytes;
     static var isPressedMember:hlx.runtime.ResolvedMember;
@@ -40,7 +41,8 @@ class FixTargetLockMod {
     static var getLockedTargetMember:hlx.runtime.ResolvedMember;
     static var isDeadMember:hlx.runtime.ResolvedMember;
     static var lockTargetMember:hlx.runtime.ResolvedMember;
-    static var isTargetBasedMember:hlx.runtime.ResolvedMember;
+    static var getStepByTypeMember:hlx.runtime.ResolvedMember;
+    static var allowAimingMember:hlx.runtime.ResolvedMember;
     static var lastController:Dynamic;
     static var originalTargetLock:Null<Bool>;
     static var lastAppliedEnabled:Null<Bool>;
@@ -132,10 +134,10 @@ class FixTargetLockMod {
     }
 
     // Farever normally refreshes autoTarget inside startSkillAim and can pass a
-    // newly looked-at enemy to the attack despite Hero.lockedTarget. For an
-    // explicitly target-based skill, invoke the existing callback with a native
-    // SkillTarget.Target containing the hard lock. Point/AoE skills continue
-    // through Farever's original targeting path.
+    // newly looked-at enemy to the attack despite Hero.lockedTarget. Every skill
+    // that immediately submits Target(autoTarget), including basic attacks, is
+    // redirected to the hard lock. Skills entering manual point/ground aiming
+    // continue through Farever's original targeting path.
     @:hlx.prefix(client.UnitController.startSkillAim)
     static function forceLockedAttackTarget(instance:Dynamic, skill:Dynamic, callback:Dynamic, input:String):HlxPrefixControl {
         if (!enabled.get() || instance != lastController)
@@ -154,14 +156,32 @@ class FixTargetLockMod {
                 baseSkillType = HlxRuntime.resolveType("st.skill.BaseSkill");
             if (baseSkillType == null)
                 return Continue;
-            if (isTargetBasedMember == null)
-                isTargetBasedMember = HlxRuntime.resolveMember(baseSkillType, "isTargetBased");
-            if (isTargetBasedMember == null)
+            if (getStepByTypeMember == null)
+                getStepByTypeMember = HlxRuntime.resolveMember(baseSkillType, "getStepByType");
+            if (getStepByTypeMember == null)
                 return Continue;
 
-            var targetBased:Dynamic = HlxRuntime.callResolved(isTargetBasedMember, [skill]);
-            if (targetBased != true)
-                return Continue;
+            // Step type 25 is Farever's explicit aiming step. startSkillAim only
+            // enters manual targeting when that step exists and the skill script
+            // allows aiming; every other branch immediately emits Target(autoTarget).
+            var aimingStep:Dynamic = HlxRuntime.callResolved(getStepByTypeMember, [skill, 25]);
+            if (aimingStep != null) {
+                if (skillScriptType == null)
+                    skillScriptType = HlxRuntime.resolveType("script.SkillScript");
+                if (skillScriptType == null)
+                    return Continue;
+                if (allowAimingMember == null)
+                    allowAimingMember = HlxRuntime.resolveMember(skillScriptType, "allowAiming");
+                if (allowAimingMember == null)
+                    return Continue;
+
+                var script:Dynamic = HlxRuntime.resolveField(skill, "script");
+                if (script == null)
+                    return Continue;
+                var usesManualAim:Dynamic = HlxRuntime.callResolved(allowAimingMember, [script]);
+                if (usesManualAim == true)
+                    return Continue;
+            }
 
             if (skillTargetType == null)
                 skillTargetType = HlxRuntime.resolveType("st.skill.SkillTarget");
@@ -173,7 +193,7 @@ class FixTargetLockMod {
                 return Continue;
 
             Reflect.callMethod(null, callback, [forcedTarget]);
-            trace("[FixTargetLock] forced target-based attack to locked target");
+            trace("[FixTargetLock] forced attack to locked target");
             return Skip;
         } catch (e:Dynamic) {
             // Preserve normal combat if a game update changes any target types.
@@ -326,7 +346,7 @@ class FixTargetLockMod {
         ImGui.text("Status: " + lastStatus);
         ImGui.textWrapped("Use Farever's existing Lock Target binding. Press once while aiming at an enemy to lock; press it again to unlock.");
         ImGui.textWrapped("Single-target attacks use the lock. Area-of-effect attacks keep their normal targeting.");
-        ImGui.textWrapped("Strict targeting is active: target-based attacks are submitted with the locked enemy even while looking at another enemy.");
+        ImGui.textWrapped("Strict targeting is active: normal and immediate-target attacks are submitted with the locked enemy even while looking at another enemy.");
 
         ImGui.separator();
         ImGui.text("Open settings hotkey: " + hotkeyLabel());
