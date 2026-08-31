@@ -12,6 +12,7 @@ class FixTargetLockMod {
     static inline var CONFIG_PATH = "hlx/mods/fix-target-lock/config.json";
 
     static var enabled = new BoolRef(true);
+    static var autoUnlockOnDeath = new BoolRef(true);
     static var panelOpen = new BoolRef(true);
     static var hasSeenMenu:Bool = false;
 
@@ -24,10 +25,16 @@ class FixTargetLockMod {
 
     static var inputType:hl.Bytes;
     static var playerControllerType:hl.Bytes;
+    static var unitControllerType:hl.Bytes;
+    static var gameCameraType:hl.Bytes;
+    static var gameObjectType:hl.Bytes;
     static var constType:hl.Bytes;
     static var isPressedMember:hlx.runtime.ResolvedMember;
     static var lockAutoTargetMember:hlx.runtime.ResolvedMember;
     static var leaveLockMember:hlx.runtime.ResolvedMember;
+    static var getGameCameraMember:hlx.runtime.ResolvedMember;
+    static var getLockedTargetMember:hlx.runtime.ResolvedMember;
+    static var isDeadMember:hlx.runtime.ResolvedMember;
     static var lastController:Dynamic;
     static var originalTargetLock:Null<Bool>;
     static var lastAppliedEnabled:Null<Bool>;
@@ -58,7 +65,8 @@ class FixTargetLockMod {
 
             var pressed:Dynamic = HlxRuntime.callResolved(isPressedMember, ["LockTarget"]);
             if (pressed != true) {
-                updateStatus(instance);
+                if (!autoUnlockDeadTarget(instance))
+                    updateStatus(instance);
                 return;
             }
 
@@ -72,6 +80,8 @@ class FixTargetLockMod {
                 updateStatus(instance);
                 trace("[FixTargetLock] lock action pressed: " + lastStatus);
             }
+
+            autoUnlockDeadTarget(instance);
         } catch (e:Dynamic) {
             lastStatus = "Error: " + Std.string(e);
             trace("[FixTargetLock] " + lastStatus);
@@ -96,6 +106,58 @@ class FixTargetLockMod {
         return isPressedMember != null
             && lockAutoTargetMember != null
             && leaveLockMember != null;
+    }
+
+    static function resolveDeathCheckMembers():Bool {
+        if (unitControllerType == null)
+            unitControllerType = HlxRuntime.resolveType("client.UnitController");
+        if (gameCameraType == null)
+            gameCameraType = HlxRuntime.resolveType("client.GameCamera");
+        if (gameObjectType == null)
+            gameObjectType = HlxRuntime.resolveType("ent.GameObject");
+        if (unitControllerType == null || gameCameraType == null || gameObjectType == null)
+            return false;
+
+        if (getGameCameraMember == null)
+            getGameCameraMember = HlxRuntime.resolveMember(unitControllerType, "get_gameCamera");
+        if (getLockedTargetMember == null)
+            getLockedTargetMember = HlxRuntime.resolveMember(gameCameraType, "getLockedTarget");
+        if (isDeadMember == null)
+            isDeadMember = HlxRuntime.resolveMember(gameObjectType, "isDead");
+
+        return getGameCameraMember != null
+            && getLockedTargetMember != null
+            && isDeadMember != null;
+    }
+
+    static function autoUnlockDeadTarget(controller:Dynamic):Bool {
+        if (!autoUnlockOnDeath.get())
+            return false;
+
+        var inLock:Dynamic = HlxRuntime.resolveField(controller, "inLock");
+        if (inLock != true || !resolveDeathCheckMembers())
+            return false;
+
+        var camera:Dynamic = HlxRuntime.callResolved(getGameCameraMember, [controller]);
+        var target:Dynamic = camera == null
+            ? null
+            : HlxRuntime.callResolved(getLockedTargetMember, [camera]);
+
+        // A missing weak target is no longer a usable lock and is treated like a
+        // despawned/dead target. Otherwise, ask the game for its native death state.
+        var shouldUnlock = target == null;
+        if (!shouldUnlock) {
+            var dead:Dynamic = HlxRuntime.callResolved(isDeadMember, [target]);
+            shouldUnlock = dead == true;
+        }
+
+        if (shouldUnlock) {
+            HlxRuntime.callResolved(leaveLockMember, [controller]);
+            lastStatus = "Unlocked (target defeated)";
+            trace("[FixTargetLock] automatically unlocked defeated target");
+            return true;
+        }
+        return false;
     }
 
     static function applyFeatureFlag():Void {
@@ -170,6 +232,11 @@ class FixTargetLockMod {
             }
             saveConfig();
         }
+
+        var oldAutoUnlock = autoUnlockOnDeath.get();
+        ImGui.checkbox("Auto-unlock when target dies", autoUnlockOnDeath);
+        if (autoUnlockOnDeath.get() != oldAutoUnlock)
+            saveConfig();
 
         ImGui.text("Status: " + lastStatus);
         ImGui.textWrapped("Use Farever's existing Lock Target binding. Press once while aiming at an enemy to lock; press it again to unlock.");
@@ -268,6 +335,7 @@ class FixTargetLockMod {
                 return;
             var data:Dynamic = Json.parse(File.getContent(CONFIG_PATH));
             if (Reflect.hasField(data, "enabled")) enabled.set(Reflect.field(data, "enabled"));
+            if (Reflect.hasField(data, "autoUnlockOnDeath")) autoUnlockOnDeath.set(Reflect.field(data, "autoUnlockOnDeath"));
             if (Reflect.hasField(data, "hotkeyKey")) hotkeyKey = cast Reflect.field(data, "hotkeyKey");
             if (Reflect.hasField(data, "hotkeyCtrl")) hotkeyCtrl = Reflect.field(data, "hotkeyCtrl");
             if (Reflect.hasField(data, "hotkeyShift")) hotkeyShift = Reflect.field(data, "hotkeyShift");
@@ -282,6 +350,7 @@ class FixTargetLockMod {
         try {
             File.saveContent(CONFIG_PATH, Json.stringify({
                 enabled: enabled.get(),
+                autoUnlockOnDeath: autoUnlockOnDeath.get(),
                 hotkeyKey: hotkeyKey,
                 hotkeyCtrl: hotkeyCtrl,
                 hotkeyShift: hotkeyShift,
@@ -292,4 +361,3 @@ class FixTargetLockMod {
         } catch (_:Dynamic) {}
     }
 }
-
