@@ -19,6 +19,7 @@ The mod uses Farever's existing `lockedTarget`, `SkillTarget`, and `hard-lock` H
 The settings window opens automatically the first time the mod runs.
 
 - **Enable** restores the target-lock feature. Disabling the mod clears the current lock and restores Farever's original feature flag.
+- **Auto-unlock when target dies** clears the lock as soon as the locked enemy is defeated or despawns. It is enabled by default.
 - Use Farever's normal **Lock Target** key or controller binding to toggle a target lock.
 - Farever's native animated hard-lock indicator appears above the locked enemy.
 - Press `F9` to reopen the settings window. The settings hotkey can be changed from the window.
