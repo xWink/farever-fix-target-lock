@@ -23,6 +23,7 @@ The settings window opens automatically the first time the mod runs.
 - **Enable** restores the target-lock feature. Disabling the mod clears the current lock and restores Farever's original feature flag.
 - **Auto-unlock when target dies** clears the lock as soon as the locked enemy is defeated or despawns. It is enabled by default.
 - **Press Lock Target to switch targets** changes the lock directly to Farever's current `autoTarget` when another enemy is aimed at. Pressing it without another valid target still unlocks normally. It is disabled by default.
+- **Disable automatic camera movement** prevents Farever from pulling the camera's yaw and pitch toward the locked enemy, leaving camera rotation under manual control. It is disabled by default.
 - Use Farever's normal **Lock Target** key or controller binding to toggle a target lock.
 - Farever's native animated hard-lock indicator appears above the locked enemy.
 - Press `F9` to reopen the settings window. The settings hotkey can be changed from the window.
