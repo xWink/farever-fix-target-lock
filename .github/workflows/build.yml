@@ -1,8 +1,5 @@
 name: Build mod
 
-permissions:
-  contents: write
-
 on:
   workflow_dispatch:
   push:
@@ -47,12 +44,3 @@ jobs:
         with:
           name: farever-fix-target-lock
           path: farever-fix-target-lock.zip
-
-      - name: Publish release
-        if: github.event.head_commit.message == 'Publish Vortex-compatible release'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.1.1
-          name: Farever Fix Target Lock 1.1.1
-          body: Vortex-compatible archive. Install the ZIP directly with Vortex, or extract it into the Farever game directory for a manual installation.
-          files: farever-fix-target-lock.zip
