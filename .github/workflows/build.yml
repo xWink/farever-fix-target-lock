@@ -33,11 +33,11 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p package/fix-target-lock
-          cp build/fix-target-lock/fix-target-lock.hl package/fix-target-lock/
-          printf "Requires HLX Core and the Farever ImGui plugin.\nCopy this folder to Farever/hlx/mods/.\n" > package/fix-target-lock/README.txt
+          mkdir -p package/hlx/mods/fix-target-lock
+          cp build/fix-target-lock/fix-target-lock.hl package/hlx/mods/fix-target-lock/
+          printf "Requires HLX Core and the Farever ImGui plugin.\nInstall with Vortex, or extract the archive into the Farever game folder.\n" > package/hlx/mods/fix-target-lock/README.txt
           cd package
-          zip -r ../farever-fix-target-lock.zip fix-target-lock
+          zip -r ../farever-fix-target-lock.zip hlx
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
