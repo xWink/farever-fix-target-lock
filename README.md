@@ -12,9 +12,8 @@ For every attack that Farever immediately submits as `Target(autoTarget)`, inclu
 
 1. Install [HLX Core](https://www.nexusmods.com/site/mods/2118?tab=files) in the Farever game directory.
 2. Install the [Farever ImGui plugin](https://www.nexusmods.com/farever/mods/4) so `imgui64.hdll` is located at `Farever\hlx\plugins\imgui64.hdll`.
-3. Create `Farever\hlx\mods\fix-target-lock\`.
-4. Place `fix-target-lock.hl` in that folder.
-5. Fully close and relaunch Farever.
+3. Download the latest build artifact ZIP. Install it with Vortex, or extract it directly into the Farever game directory; the archive already contains `hlx\mods\fix-target-lock\fix-target-lock.hl`.
+4. Fully close and relaunch Farever.
 
 ## Usage
 
