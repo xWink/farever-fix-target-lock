@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "displayName": "Fix Target Lock",
+  "configFile": "config.json",
+  "configs": [
+    {
+      "key": "enabled",
+      "type": "checkbox",
+      "label": "Enabled"
+    },
+    {
+      "key": "autoUnlockOnDeath",
+      "type": "checkbox",
+      "label": "Auto-unlock when target dies"
+    },
+    {
+      "key": "quickSwapTarget",
+      "type": "checkbox",
+      "label": "Press Lock Target to switch targets"
+    },
+    {
+      "key": "disableCameraMovement",
+      "type": "checkbox",
+      "label": "Disable automatic camera movement"
+    }
+  ]
+}
