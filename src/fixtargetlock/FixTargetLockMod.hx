@@ -1,9 +1,6 @@
 package fixtargetlock;
 
 import haxe.Json;
-import imgui.ImGui;
-import imgui.Enums.ImGuiKey;
-import imgui.ref.BoolRef;
 import hlx.runtime.HlxPrefixControl;
 import sys.FileSystem;
 import sys.io.File;
@@ -12,19 +9,11 @@ import sys.io.File;
 class FixTargetLockMod {
     static inline var CONFIG_PATH = "hlx/mods/fix-target-lock/config.json";
 
-    static var enabled = new BoolRef(true);
-    static var autoUnlockOnDeath = new BoolRef(true);
-    static var quickSwapTarget = new BoolRef(false);
-    static var disableCameraMovement = new BoolRef(false);
-    static var panelOpen = new BoolRef(true);
-    static var hasSeenMenu:Bool = false;
+    static var enabled:Bool = true;
+    static var autoUnlockOnDeath:Bool = true;
+    static var quickSwapTarget:Bool = false;
+    static var disableCameraMovement:Bool = false;
 
-    static var hotkeyKey:Int = ImGuiKey.F9;
-    static var hotkeyCtrl:Bool = false;
-    static var hotkeyShift:Bool = false;
-    static var hotkeyAlt:Bool = false;
-    static var hotkeySuper:Bool = false;
-    static var capturingHotkey:Bool = false;
     static var lastConfigModified:Float = -1.0;
     static var configCheckTimer:Float = 0.0;
 
@@ -56,8 +45,6 @@ class FixTargetLockMod {
         loadConfig();
         if (!FileSystem.exists(CONFIG_PATH))
             saveConfig();
-        panelOpen.set(!hasSeenMenu);
-        ImGui.register(HlxRuntime.moduleName(), drawSettings);
     }
 
     @:hlx.postfix(client.PlayerController.updateInputs)
@@ -71,7 +58,7 @@ class FixTargetLockMod {
 
         try {
             applyFeatureFlag();
-            if (!enabled.get()) {
+            if (!enabled) {
                 lastStatus = "Disabled";
                 return;
             }
@@ -92,7 +79,7 @@ class FixTargetLockMod {
             if (inLock == true) {
                 var swapped = false;
                 var aimedTarget:Dynamic = HlxRuntime.resolveField(instance, "autoTarget");
-                if (quickSwapTarget.get() && aimedTarget != null) {
+                if (quickSwapTarget && aimedTarget != null) {
                     var lockedTarget = getLockedTarget(instance);
                     if (lockedTarget != aimedTarget) {
                         HlxRuntime.callResolved(lockTargetMember, [instance, aimedTarget]);
@@ -147,7 +134,7 @@ class FixTargetLockMod {
     // continue through Farever's original targeting path.
     @:hlx.prefix(client.UnitController.startSkillAim)
     static function forceLockedAttackTarget(instance:Dynamic, skill:Dynamic, callback:Dynamic, input:String):HlxPrefixControl {
-        if (!enabled.get() || instance != lastController)
+        if (!enabled || instance != lastController)
             return Continue;
 
         try {
@@ -231,7 +218,7 @@ class FixTargetLockMod {
     }
 
     static function autoUnlockDeadTarget(controller:Dynamic):Bool {
-        if (!autoUnlockOnDeath.get())
+        if (!autoUnlockOnDeath)
             return false;
 
         var inLock:Dynamic = HlxRuntime.resolveField(controller, "inLock");
@@ -284,7 +271,7 @@ class FixTargetLockMod {
 
         // Keep Farever's lock mode enabled outside the camera update. Other
         // systems use this flag for locked sensitivity and targeting behavior.
-        var desired = enabled.get() ? true : originalTargetLock;
+        var desired = enabled ? true : originalTargetLock;
         if (lastAppliedTargetLock == desired)
             return;
 
@@ -295,7 +282,7 @@ class FixTargetLockMod {
     @:hlx.prefix(client.GameCamera.postUpdate)
     static function beforeCameraPostUpdate(instance:Dynamic, dt:Float):HlxPrefixControl {
         cameraUpdateTargetLock = null;
-        if (!enabled.get() || !disableCameraMovement.get())
+        if (!enabled || !disableCameraMovement)
             return Continue;
 
         try {
@@ -348,150 +335,17 @@ class FixTargetLockMod {
         applyFeatureFlag();
     }
 
-    static function drawSettings():Void {
-        if (!capturingHotkey && hotkeyPressed())
-            panelOpen.set(!panelOpen.get());
-
-        if (!panelOpen.get())
-            return;
-
-        ImGui.setNextWindowBgAlpha(0.98);
-        if (!ImGui.begin("Target Lock Settings", panelOpen)) {
-            ImGui.end();
-            return;
-        }
-
-        if (!hasSeenMenu) {
-            hasSeenMenu = true;
-            saveConfig();
-        }
-
-        var oldEnabled = enabled.get();
-        ImGui.checkbox("Enable", enabled);
-        if (enabled.get() != oldEnabled) {
-            if (!enabled.get())
-                disableAndUnlock();
-            else {
-                lastAppliedTargetLock = null;
-                applyFeatureFlag();
-            }
-            saveConfig();
-        }
-
-        var oldAutoUnlock = autoUnlockOnDeath.get();
-        ImGui.checkbox("Auto-unlock when target dies", autoUnlockOnDeath);
-        if (autoUnlockOnDeath.get() != oldAutoUnlock)
-            saveConfig();
-
-        var oldQuickSwap = quickSwapTarget.get();
-        ImGui.checkbox("Press Lock Target to switch targets", quickSwapTarget);
-        if (quickSwapTarget.get() != oldQuickSwap)
-            saveConfig();
-
-        var oldDisableCamera = disableCameraMovement.get();
-        ImGui.checkbox("Disable automatic camera movement", disableCameraMovement);
-        if (disableCameraMovement.get() != oldDisableCamera) {
-            saveConfig();
-        }
-
-        ImGui.separator();
-        ImGui.text("Open settings hotkey: " + hotkeyLabel());
-        if (!capturingHotkey) {
-            if (ImGui.button("Change hotkey"))
-                capturingHotkey = true;
-        } else {
-            ImGui.text("Press a key combination...");
-            ImGui.text("Hold Ctrl/Shift/Alt/Win, then press a key. Esc cancels.");
-            captureNextHotkey();
-        }
-
-        ImGui.end();
-    }
-
-    static function hotkeyPressed():Bool {
-        if (!ImGui.isKeyPressed(hotkeyKey, false))
-            return false;
-        return modifierDown(ImGuiKey.LeftCtrl, ImGuiKey.RightCtrl) == hotkeyCtrl
-            && modifierDown(ImGuiKey.LeftShift, ImGuiKey.RightShift) == hotkeyShift
-            && modifierDown(ImGuiKey.LeftAlt, ImGuiKey.RightAlt) == hotkeyAlt
-            && modifierDown(ImGuiKey.LeftSuper, ImGuiKey.RightSuper) == hotkeySuper;
-    }
-
-    static function captureNextHotkey():Void {
-        if (ImGui.isKeyPressed(ImGuiKey.Escape, false)) {
-            capturingHotkey = false;
-            return;
-        }
-        for (key in 512...632) {
-            if (isModifierKey(key) || key == ImGuiKey.Escape)
-                continue;
-            if (ImGui.isKeyPressed(key, false)) {
-                hotkeyKey = key;
-                hotkeyCtrl = modifierDown(ImGuiKey.LeftCtrl, ImGuiKey.RightCtrl);
-                hotkeyShift = modifierDown(ImGuiKey.LeftShift, ImGuiKey.RightShift);
-                hotkeyAlt = modifierDown(ImGuiKey.LeftAlt, ImGuiKey.RightAlt);
-                hotkeySuper = modifierDown(ImGuiKey.LeftSuper, ImGuiKey.RightSuper);
-                capturingHotkey = false;
-                saveConfig();
-                return;
-            }
-        }
-    }
-
-    static inline function modifierDown(left:Int, right:Int):Bool
-        return ImGui.isKeyDown(left) || ImGui.isKeyDown(right);
-
-    static inline function isModifierKey(key:Int):Bool
-        return key >= ImGuiKey.LeftCtrl && key <= ImGuiKey.RightSuper;
-
-    static function hotkeyLabel():String {
-        var parts = new Array<String>();
-        if (hotkeyCtrl) parts.push("Ctrl");
-        if (hotkeyShift) parts.push("Shift");
-        if (hotkeyAlt) parts.push("Alt");
-        if (hotkeySuper) parts.push("Win");
-        parts.push(keyLabel(hotkeyKey));
-        return parts.join(" + ");
-    }
-
-    static function keyLabel(key:Int):String {
-        if (key >= ImGuiKey._0 && key <= ImGuiKey._9)
-            return String.fromCharCode(48 + (key - ImGuiKey._0));
-        if (key >= ImGuiKey.A && key <= ImGuiKey.Z)
-            return String.fromCharCode(65 + (key - ImGuiKey.A));
-        if (key >= ImGuiKey.F1 && key <= ImGuiKey.F24)
-            return "F" + (key - ImGuiKey.F1 + 1);
-        return switch (key) {
-            case ImGuiKey.Tab: "Tab";
-            case ImGuiKey.LeftArrow: "Left";
-            case ImGuiKey.RightArrow: "Right";
-            case ImGuiKey.UpArrow: "Up";
-            case ImGuiKey.DownArrow: "Down";
-            case ImGuiKey.PageUp: "Page Up";
-            case ImGuiKey.PageDown: "Page Down";
-            case ImGuiKey.Home: "Home";
-            case ImGuiKey.End: "End";
-            case ImGuiKey.Insert: "Insert";
-            case ImGuiKey.Delete: "Delete";
-            case ImGuiKey.Backspace: "Backspace";
-            case ImGuiKey.Space: "Space";
-            case ImGuiKey.Enter: "Enter";
-            case ImGuiKey.Menu: "Menu";
-            default: "Key " + key;
-        };
-    }
-
     static function reloadConfigIfChanged():Void {
         try {
             if (!FileSystem.exists(CONFIG_PATH))
                 return;
             var modified = FileSystem.stat(CONFIG_PATH).mtime.getTime();
             if (modified != lastConfigModified) {
-                var wasEnabled = enabled.get();
+                var wasEnabled = enabled;
                 loadConfig();
-                if (wasEnabled && !enabled.get())
+                if (wasEnabled && !enabled)
                     disableAndUnlock();
-                else if (!wasEnabled && enabled.get()) {
+                else if (!wasEnabled && enabled) {
                     lastAppliedTargetLock = null;
                     applyFeatureFlag();
                 }
@@ -511,17 +365,10 @@ class FixTargetLockMod {
             if (!FileSystem.exists(CONFIG_PATH))
                 return;
             var data:Dynamic = Json.parse(File.getContent(CONFIG_PATH));
-            if (Reflect.hasField(data, "enabled")) enabled.set(Reflect.field(data, "enabled"));
-            if (Reflect.hasField(data, "autoUnlockOnDeath")) autoUnlockOnDeath.set(Reflect.field(data, "autoUnlockOnDeath"));
-            if (Reflect.hasField(data, "quickSwapTarget")) quickSwapTarget.set(Reflect.field(data, "quickSwapTarget"));
-            if (Reflect.hasField(data, "disableCameraMovement")) disableCameraMovement.set(Reflect.field(data, "disableCameraMovement"));
-            if (Reflect.hasField(data, "hotkeyKey")) hotkeyKey = cast Reflect.field(data, "hotkeyKey");
-            if (Reflect.hasField(data, "hotkeyCtrl")) hotkeyCtrl = Reflect.field(data, "hotkeyCtrl");
-            if (Reflect.hasField(data, "hotkeyShift")) hotkeyShift = Reflect.field(data, "hotkeyShift");
-            if (Reflect.hasField(data, "hotkeyAlt")) hotkeyAlt = Reflect.field(data, "hotkeyAlt");
-            if (Reflect.hasField(data, "hotkeySuper")) hotkeySuper = Reflect.field(data, "hotkeySuper");
-            if (Reflect.hasField(data, "hasSeenMenu")) hasSeenMenu = Reflect.field(data, "hasSeenMenu");
-            else hasSeenMenu = true;
+            if (Reflect.hasField(data, "enabled")) enabled = Reflect.field(data, "enabled");
+            if (Reflect.hasField(data, "autoUnlockOnDeath")) autoUnlockOnDeath = Reflect.field(data, "autoUnlockOnDeath");
+            if (Reflect.hasField(data, "quickSwapTarget")) quickSwapTarget = Reflect.field(data, "quickSwapTarget");
+            if (Reflect.hasField(data, "disableCameraMovement")) disableCameraMovement = Reflect.field(data, "disableCameraMovement");
         } catch (_:Dynamic) {}
         updateConfigModifiedTime();
     }
@@ -529,16 +376,10 @@ class FixTargetLockMod {
     static function saveConfig():Void {
         try {
             File.saveContent(CONFIG_PATH, Json.stringify({
-                enabled: enabled.get(),
-                autoUnlockOnDeath: autoUnlockOnDeath.get(),
-                quickSwapTarget: quickSwapTarget.get(),
-                disableCameraMovement: disableCameraMovement.get(),
-                hotkeyKey: hotkeyKey,
-                hotkeyCtrl: hotkeyCtrl,
-                hotkeyShift: hotkeyShift,
-                hotkeyAlt: hotkeyAlt,
-                hotkeySuper: hotkeySuper,
-                hasSeenMenu: hasSeenMenu
+                enabled: enabled,
+                autoUnlockOnDeath: autoUnlockOnDeath,
+                quickSwapTarget: quickSwapTarget,
+                disableCameraMovement: disableCameraMovement
             }, null, "  "));
             updateConfigModifiedTime();
         } catch (_:Dynamic) {}
