@@ -26,6 +26,7 @@ jobs:
       - name: Install HLX dependencies
         run: |
           haxelib git hlx-runtime https://github.com/hlx-framework/hlx-core.git main hlx-runtime/src
+          haxelib git hl-imgui https://github.com/laymain/farever-mods.git main imgui/hl-imgui/src
 
       - name: Compile
         run: haxe compile.hxml
