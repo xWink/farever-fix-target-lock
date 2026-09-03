@@ -1,4 +1,5 @@
 -lib hlx-runtime
+-lib hl-imgui
 -D hl-ver=1.16.0
 -cp src
 -main fixtargetlock.FixTargetLockMod
