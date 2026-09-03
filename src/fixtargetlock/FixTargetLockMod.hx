@@ -486,8 +486,16 @@ class FixTargetLockMod {
             if (!FileSystem.exists(CONFIG_PATH))
                 return;
             var modified = FileSystem.stat(CONFIG_PATH).mtime.getTime();
-            if (modified != lastConfigModified)
+            if (modified != lastConfigModified) {
+                var wasEnabled = enabled.get();
                 loadConfig();
+                if (wasEnabled && !enabled.get())
+                    disableAndUnlock();
+                else if (!wasEnabled && enabled.get()) {
+                    lastAppliedTargetLock = null;
+                    applyFeatureFlag();
+                }
+            }
         } catch (_:Dynamic) {}
     }
 
