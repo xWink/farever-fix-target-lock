@@ -43,8 +43,7 @@ class FixTargetLockMod {
 
     static function main():Void {
         loadConfig();
-        if (!FileSystem.exists(CONFIG_PATH))
-            saveConfig();
+        saveConfig();
     }
 
     @:hlx.postfix(client.PlayerController.updateInputs)
