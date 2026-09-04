@@ -37,11 +37,9 @@ jobs:
           cp build/fix-target-lock/fix-target-lock.hl package/hlx/mods/fix-target-lock/
           cp configFormats.json package/hlx/mods/fix-target-lock/
           printf "Requires HLX Core and the Farever ImGui plugin.\nInstall with Vortex, or extract the archive into the Farever game folder.\n" > package/hlx/mods/fix-target-lock/README.txt
-          cd package
-          zip -r ../farever-fix-target-lock.zip hlx
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: farever-fix-target-lock
-          path: farever-fix-target-lock.zip
+          path: package/
