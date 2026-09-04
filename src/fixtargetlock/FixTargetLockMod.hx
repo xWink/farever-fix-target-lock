@@ -1,6 +1,7 @@
 package fixtargetlock;
 
 import haxe.Json;
+import hlx.runtime.Bus;
 import hlx.runtime.HlxPrefixControl;
 import sys.FileSystem;
 import sys.io.File;
@@ -8,14 +9,13 @@ import sys.io.File;
 @:build(hlx.runtime.Mod.build())
 class FixTargetLockMod {
     static inline var CONFIG_PATH = "hlx/mods/fix-target-lock/config.json";
+    static inline var SETTINGS_CHANGED_TOPIC_PREFIX =
+        "better-mod-settings/config-changed/";
 
     static var enabled:Bool = true;
     static var autoUnlockOnDeath:Bool = true;
     static var quickSwapTarget:Bool = false;
     static var disableCameraMovement:Bool = false;
-
-    static var lastConfigModified:Float = -1.0;
-    static var configCheckTimer:Float = 0.0;
 
     static var inputType:hl.Bytes;
     static var playerControllerType:hl.Bytes;
@@ -44,15 +44,14 @@ class FixTargetLockMod {
     static function main():Void {
         loadConfig();
         saveConfig();
+        Bus.subscribe(
+            SETTINGS_CHANGED_TOPIC_PREFIX + HlxRuntime.moduleName(),
+            onBetterModSettingsChanged
+        );
     }
 
     @:hlx.postfix(client.PlayerController.updateInputs)
     static function afterUpdateInputs(instance:Dynamic, dt:Float, result:Void):Void {
-        configCheckTimer += dt;
-        if (configCheckTimer >= 1.0) {
-            configCheckTimer = 0.0;
-            reloadConfigIfChanged();
-        }
         lastController = instance;
 
         try {
@@ -334,29 +333,15 @@ class FixTargetLockMod {
         applyFeatureFlag();
     }
 
-    static function reloadConfigIfChanged():Void {
-        try {
-            if (!FileSystem.exists(CONFIG_PATH))
-                return;
-            var modified = FileSystem.stat(CONFIG_PATH).mtime.getTime();
-            if (modified != lastConfigModified) {
-                var wasEnabled = enabled;
-                loadConfig();
-                if (wasEnabled && !enabled)
-                    disableAndUnlock();
-                else if (!wasEnabled && enabled) {
-                    lastAppliedTargetLock = null;
-                    applyFeatureFlag();
-                }
-            }
-        } catch (_:Dynamic) {}
-    }
-
-    static function updateConfigModifiedTime():Void {
-        try {
-            if (FileSystem.exists(CONFIG_PATH))
-                lastConfigModified = FileSystem.stat(CONFIG_PATH).mtime.getTime();
-        } catch (_:Dynamic) {}
+    static function onBetterModSettingsChanged(_:Dynamic):Void {
+        var wasEnabled = enabled;
+        loadConfig();
+        if (wasEnabled && !enabled)
+            disableAndUnlock();
+        else if (!wasEnabled && enabled) {
+            lastAppliedTargetLock = null;
+            applyFeatureFlag();
+        }
     }
 
     static function loadConfig():Void {
@@ -369,7 +354,6 @@ class FixTargetLockMod {
             if (Reflect.hasField(data, "quickSwapTarget")) quickSwapTarget = Reflect.field(data, "quickSwapTarget");
             if (Reflect.hasField(data, "disableCameraMovement")) disableCameraMovement = Reflect.field(data, "disableCameraMovement");
         } catch (_:Dynamic) {}
-        updateConfigModifiedTime();
     }
 
     static function saveConfig():Void {
@@ -380,7 +364,6 @@ class FixTargetLockMod {
                 quickSwapTarget: quickSwapTarget,
                 disableCameraMovement: disableCameraMovement
             }, null, "  "));
-            updateConfigModifiedTime();
         } catch (_:Dynamic) {}
     }
 }
